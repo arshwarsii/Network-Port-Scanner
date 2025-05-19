@@ -17,12 +17,9 @@ shodan_api = shodan.Shodan(SHODAN_API_KEY) if SHODAN_API_KEY else None
 
 def parse_ip_range(ip_range):
     try:
-        # Try CIDR notation first
         if '/' in ip_range:
             network = ipaddress.IPv4Network(ip_range, strict=False)
             return list(network.hosts())
-        
-        # Try IP range format (e.g., 192.168.1.1-192.168.1.5)
         if '-' in ip_range:
             start_ip, end_ip = ip_range.split('-', 1)
             start = ipaddress.IPv4Address(start_ip.strip())
@@ -30,10 +27,7 @@ def parse_ip_range(ip_range):
             if start > end:
                 start, end = end, start
             return [ipaddress.IPv4Address(ip) for ip in range(int(start), int(end)+1)]
-        
-        # Single IP
         return [ipaddress.IPv4Address(ip_range)]
-    
     except (ipaddress.AddressValueError, ValueError):
         return None
 
@@ -47,64 +41,47 @@ def scan():
     if not ip_range:
         return jsonify({"error": "Please enter an IP range to scan"})
     
-    # Parse IP range
     ips = parse_ip_range(ip_range)
     if not ips:
-        return jsonify({"error": "Invalid IP range format. Use CIDR (192.168.1.0/24) or range (192.168.1.1-192.168.1.5)"})
+        return jsonify({"error": "Invalid IP range format. Use CIDR or IP range"})
     
-    # Safety check
     if len(ips) > MAX_SCAN_IPS:
         return jsonify({"error": f"Maximum scan range exceeded ({MAX_SCAN_IPS} IPs allowed)"})
-    
-    # Scan IPs concurrently
+
     results = []
     with ThreadPoolExecutor(max_workers=10) as executor:
         futures = [executor.submit(scan_ip, ip) for ip in ips]
-        for future in futures:
-            results.append(future.result())
+        results = [future.result() for future in futures]
     
     return jsonify({"results": results})
 
 def scan_ip(ip):
-    result = {"ip": str(ip), "ports": [], "vulnerabilities": [], "source": "local"}
+    result = {"ip": str(ip), "ports": [], "vulnerabilities": [], "source": "shodan"}
     
-    # Try Shodan first if available
-    if shodan_api:
-        try:
-            host = shodan_api.host(str(ip))
-            result["ports"] = [{
-                "port": item['port'],
-                "status": "open",
-                "service": item.get('product', 'unknown')
-            } for item in host['data']]
-            result["vulnerabilities"] = host.get('vulns', [])
-            result["source"] = "shodan"
-            return result
-        except shodan.APIError:
-            pass
-        except Exception as e:
-            print(f"Shodan error: {e}")
+    if not shodan_api:
+        return result
     
-    # Local port scanning (fixed the socket.connect_ex syntax)
-    for port in COMMON_PORTS:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
-                # Fixed the parentheses placement here
-                if s.connect_ex((str(ip), port)) == 0:
-                    try:
-                        service = socket.getservbyport(port)
-                    except:
-                        service = "unknown"
-                    result["ports"].append({
-                        "port": port,
-                        "status": "open",
-                        "service": service
-                    })
-        except:
-            continue
-    
-    return result
+    try:
+        host = shodan_api.host(str(ip))
+        result["ports"] = [{
+            "port": item['port'],
+            "status": "open",
+            "service": item.get('product', 'unknown')
+        } for item in host['data']]
+        result["vulnerabilities"] = host.get('vulns', [])
+        return result
+    except shodan.APIError as e:
+        print(f"Shodan API error: {e}")
+        return result
+    except Exception as e:
+        print(f"General error: {e}")
+        return result
+
+@app.route('/get_my_ip', methods=['GET'])
+def get_my_ip():
+    # X-Forwarded-For header for proxy compatibility
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+    return jsonify({"ip": client_ip.split(',')[0].strip()})
 
 if __name__ == '__main__':
     app.run(debug=True)
