@@ -12,7 +12,7 @@ MAX_SCAN_IPS = 256  # Maximum number of IPs allowed per scan
 COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 3389]
 
 # Initialize Shodan (use environment variable for API key)
-SHODAN_API_KEY = os.getenv('SHODAN_API_KEY', '')
+SHODAN_API_KEY = os.getenv('Sw6nsq5lw00tEfuUk2XGSteUPoTbhJCl', '')
 shodan_api = shodan.Shodan(SHODAN_API_KEY) if SHODAN_API_KEY else None
 
 def parse_ip_range(ip_range):
