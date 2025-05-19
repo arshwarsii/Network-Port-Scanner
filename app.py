@@ -12,7 +12,7 @@ app.logger.setLevel(logging.DEBUG)
 MAX_SCAN_IPS = 256
 
 # Shodan configuration
-SHODAN_API_KEY = os.getenv('SHODAN_API_KEY', '')
+SHODAN_API_KEY = os.getenv('Sw6nsq5lw00tEfuUk2XGSteUPoTbhJCl', '')
 shodan_api = shodan.Shodan(SHODAN_API_KEY) if SHODAN_API_KEY else None
 
 def parse_target(target):
