@@ -1,0 +1,883 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Scanner</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.umd.js"></script>
+    <style>
+        .loader {
+            border-top-color: #3498db;
+            animation: spinner 1.5s linear infinite;
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .port-open {
+            background-color: rgba(52, 211, 153, 0.1);
+            border-left: 4px solid rgb(52, 211, 153);
+        }
+        .vuln-high {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid rgb(239, 68, 68);
+        }
+        .vuln-medium {
+            background-color: rgba(245, 158, 11, 0.1);
+            border-left: 4px solid rgb(245, 158, 11);
+        }
+        .vuln-low {
+            background-color: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid rgb(59, 130, 246);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- Header -->
+        <header class="flex items-center justify-between mb-8">
+            <div class="flex items-center space-x-3">
+                <div class="bg-blue-600 text-white p-2 rounded-lg">
+                    <i data-lucide="scan" class="w-6 h-6"></i>
+                </div>
+                <h1 class="text-2xl font-bold text-gray-800">Network Scanner</h1>
+            </div>
+            <div class="flex items-center space-x-2 text-sm text-gray-600">
+                <i data-lucide="shield" class="w-4 h-4"></i>
+                <span>Educational Use Only</span>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Panel - Scan Controls -->
+            <div class="lg:col-span-1 bg-white rounded-xl shadow-md p-6">
+                <div class="flex items-center space-x-2 mb-4">
+                    <i data-lucide="target" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="font-semibold text-gray-700">Scan Configuration</h2>
+                </div>
+                
+                <form id="scanForm" class="space-y-4">
+                    <div>
+                        <label for="ip_range" class="block text-sm font-medium text-gray-700 mb-1">IP Range</label>
+                        <div class="flex items-center border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                            <div class="px-3 py-2 bg-gray-50 border-r border-gray-300">
+                                <i data-lucide="network" class="w-5 h-5 text-gray-500"></i>
+                            </div>
+                            <input 
+                                type="text" 
+                                id="ip_range" 
+                                name="ip_range" 
+                                class="flex-1 p-2 outline-none text-gray-700" 
+                                placeholder="192.168.1.0/24 or 192.168.1.1-192.168.1.10"
+                            >
+                        </div>
+                        <p class="mt-1 text-xs text-gray-500">CIDR notation or IP range (max 256 IPs)</p>
+                    </div>
+
+                    <div class="pt-2">
+                        <button 
+                            type="submit" 
+                            id="scanButton"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2 transition"
+                        >
+                            <i data-lucide="search" class="w-5 h-5"></i>
+                            <span>Start Scan</span>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Quick Reference -->
+                <div class="mt-8">
+                    <div class="flex items-center space-x-2 mb-3">
+                        <i data-lucide="file-text" class="w-5 h-5 text-blue-600"></i>
+                        <h3 class="font-semibold text-gray-700">Quick Reference</h3>
+                    </div>
+                    <div class="text-sm text-gray-600 space-y-2">
+                        <div class="flex items-start space-x-2">
+                            <i data-lucide="info" class="w-4 h-4 text-blue-500 mt-0.5"></i>
+                            <p>Open ports are potential entry points for attackers. The fewer open ports, the smaller your attack surface.</p>
+                        </div>
+                        <div class="flex items-start space-x-2">
+                            <i data-lucide="shield-alert" class="w-4 h-4 text-orange-500 mt-0.5"></i>
+                            <p>Common vulnerable services: FTP (21), Telnet (23), SMB (445), RDP (3389)</p>
+                        </div>
+                        <div class="flex items-start space-x-2">
+                            <i data-lucide="lock" class="w-4 h-4 text-green-500 mt-0.5"></i>
+                            <p>Always protect network services with strong authentication and encryption</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Results -->
+            <div class="lg:col-span-2 bg-white rounded-xl shadow-md p-6">
+                <div class="flex items-center justify-between mb-6">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="list" class="w-5 h-5 text-blue-600"></i>
+                        <h2 class="font-semibold text-gray-700">Scan Results</h2>
+                    </div>
+                    <div id="scanStatus" class="text-sm font-medium text-gray-500">Ready to scan</div>
+                </div>
+
+                <div id="loader" class="hidden">
+                    <div class="flex flex-col items-center justify-center py-12">
+                        <div class="loader h-12 w-12 border-4 border-gray-200 rounded-full"></div>
+                        <p class="mt-4 text-gray-600">Scanning network...</p>
+                    </div>
+                </div>
+
+                <div id="noResults" class="hidden">
+                    <div class="flex flex-col items-center justify-center py-12 text-gray-500">
+                        <i data-lucide="search-x" class="w-12 h-12 mb-4"></i>
+                        <p>No scan results yet. Enter an IP range and start scanning.</p>
+                    </div>
+                </div>
+
+                <div id="resultsContainer" class="hidden">
+                    <div class="mb-4 flex items-center justify-between">
+                        <div class="flex space-x-4">
+                            <div class="text-sm font-medium">
+                                <span class="text-gray-500">Scanned: </span>
+                                <span id="scannedCount" class="text-gray-900">0</span>
+                            </div>
+                            <div class="text-sm font-medium">
+                                <span class="text-gray-500">Open Ports: </span>
+                                <span id="openPortsCount" class="text-gray-900">0</span>
+                            </div>
+                            <div class="text-sm font-medium">
+                                <span class="text-gray-500">Vulnerabilities: </span>
+                                <span id="vulnCount" class="text-gray-900">0</span>
+                            </div>
+                        </div>
+                        <button id="clearResults" class="text-sm text-gray-500 hover:text-gray-700 flex items-center space-x-1">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>Clear</span>
+                        </button>
+                    </div>
+
+                    <div id="resultsAccordion" class="space-y-3">
+                        <!-- Results will be populated here by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Educational Section -->
+        <section class="mt-8 bg-white rounded-xl shadow-md p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center space-x-2">
+                    <i data-lucide="graduation-cap" class="w-5 h-5 text-blue-600"></i>
+                    <h2 class="font-semibold text-gray-700">Understanding Network Reconnaissance</h2>
+                </div>
+                
+                <!-- Tab Navigation -->
+                <div class="flex space-x-2 text-sm">
+                    <button id="basicInfoTab" class="px-3 py-1 bg-blue-100 text-blue-800 rounded-lg font-medium">Basic Info</button>
+                    <button id="commonPortsTab" class="px-3 py-1 text-gray-600 hover:bg-gray-100 rounded-lg font-medium">Common Ports</button>
+                </div>
+            </div>
+
+            <!-- Basic Info Tab Content -->
+            <div id="basicInfoContent" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center space-x-2 mb-3">
+                        <div class="bg-blue-100 p-2 rounded-lg">
+                            <i data-lucide="scan" class="w-5 h-5 text-blue-600"></i>
+                        </div>
+                        <h3 class="font-medium text-gray-700">What is Port Scanning?</h3>
+                    </div>
+                    <p class="text-sm text-gray-600">Port scanning is a technique used to identify open ports and services on a network. Each open port potentially represents a service that could be exploited if not properly secured.</p>
+                </div>
+
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center space-x-2 mb-3">
+                        <div class="bg-orange-100 p-2 rounded-lg">
+                            <i data-lucide="shield-off" class="w-5 h-5 text-orange-600"></i>
+                        </div>
+                        <h3 class="font-medium text-gray-700">Attack Vectors</h3>
+                    </div>
+                    <p class="text-sm text-gray-600">Attackers use reconnaissance to discover vulnerabilities. They look for outdated services, default configurations, and known exploits to gain unauthorized access to systems.</p>
+                </div>
+
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center space-x-2 mb-3">
+                        <div class="bg-green-100 p-2 rounded-lg">
+                            <i data-lucide="shield" class="w-5 h-5 text-green-600"></i>
+                        </div>
+                        <h3 class="font-medium text-gray-700">Defense Strategies</h3>
+                    </div>
+                    <p class="text-sm text-gray-600">Practice the principle of least privilege by only running necessary services. Use firewalls, keep systems updated, and implement strong authentication to minimize your attack surface.</p>
+                </div>
+            </div>
+
+            <!-- Common Ports Tab Content -->
+            <div id="commonPortsContent" class="hidden">
+                <div class="mb-4 flex items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="list" class="w-5 h-5 text-blue-600"></i>
+                        <h3 class="font-medium text-gray-700">100 Common Ports & Their Vulnerabilities</h3>
+                    </div>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="portSearch" 
+                            placeholder="Search ports..." 
+                            class="pl-8 pr-3 py-1 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                        <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-2 top-1/2 transform -translate-y-1/2"></i>
+                    </div>
+                </div>
+                
+                <div class="overflow-hidden border border-gray-200 rounded-lg">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Port</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Potential Vulnerabilities</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200 text-sm" id="portsTableBody">
+                            <tr>
+                                <td class="px-4 py-3 font-medium">20/21</td>
+                                <td class="px-4 py-3">FTP</td>
+                                <td class="px-4 py-3">File Transfer Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Anonymous access, cleartext credentials, outdated versions (ProFTPD, vsftpd), directory traversal</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">22</td>
+                                <td class="px-4 py-3">SSH</td>
+                                <td class="px-4 py-3">Secure Shell</td>
+                                <td class="px-4 py-3 text-red-600">Weak passwords, outdated versions (OpenSSH < 7.9), brute force attacks, SSH key mismanagement</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">23</td>
+                                <td class="px-4 py-3">Telnet</td>
+                                <td class="px-4 py-3">Telnet</td>
+                                <td class="px-4 py-3 text-red-600">Cleartext communications, no encryption, susceptible to MITM attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">25</td>
+                                <td class="px-4 py-3">SMTP</td>
+                                <td class="px-4 py-3">Simple Mail Transfer Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Open relay, email spoofing, outdated servers (Exim, Sendmail), SMTP injection</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">53</td>
+                                <td class="px-4 py-3">DNS</td>
+                                <td class="px-4 py-3">Domain Name System</td>
+                                <td class="px-4 py-3 text-red-600">DNS cache poisoning, zone transfers, DDoS amplification, outdated BIND servers</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">67/68</td>
+                                <td class="px-4 py-3">DHCP</td>
+                                <td class="px-4 py-3">Dynamic Host Configuration Protocol</td>
+                                <td class="px-4 py-3 text-red-600">DHCP starvation, rogue DHCP servers, IP spoofing</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">69</td>
+                                <td class="px-4 py-3">TFTP</td>
+                                <td class="px-4 py-3">Trivial File Transfer Protocol</td>
+                                <td class="px-4 py-3 text-red-600">No authentication, cleartext transfers, directory traversal</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">80</td>
+                                <td class="px-4 py-3">HTTP</td>
+                                <td class="px-4 py-3">Hypertext Transfer Protocol</td>
+                                <td class="px-4 py-3 text-red-600">SQL injection, XSS, CSRF, directory traversal, file inclusion, outdated web servers (Apache, Nginx)</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">88</td>
+                                <td class="px-4 py-3">Kerberos</td>
+                                <td class="px-4 py-3">Authentication protocol</td>
+                                <td class="px-4 py-3 text-red-600">Pass-the-ticket, Kerberoasting, Golden Ticket, authentication bypass</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">110</td>
+                                <td class="px-4 py-3">POP3</td>
+                                <td class="px-4 py-3">Post Office Protocol v3</td>
+                                <td class="px-4 py-3 text-red-600">Cleartext authentication, brute force attacks, outdated mail servers</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">111</td>
+                                <td class="px-4 py-3">RPCBind</td>
+                                <td class="px-4 py-3">Remote Procedure Call</td>
+                                <td class="px-4 py-3 text-red-600">Service enumeration, buffer overflows, DoS conditions</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">123</td>
+                                <td class="px-4 py-3">NTP</td>
+                                <td class="px-4 py-3">Network Time Protocol</td>
+                                <td class="px-4 py-3 text-red-600">NTP reflection attacks, DDoS amplification, time spoofing</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">135</td>
+                                <td class="px-4 py-3">MSRPC</td>
+                                <td class="px-4 py-3">Microsoft RPC</td>
+                                <td class="px-4 py-3 text-red-600">Remote code execution, service enumeration, EternalBlue</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">137-139</td>
+                                <td class="px-4 py-3">NetBIOS</td>
+                                <td class="px-4 py-3">NetBIOS</td>
+                                <td class="px-4 py-3 text-red-600">Name service spoofing, null sessions, system information enumeration</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">143</td>
+                                <td class="px-4 py-3">IMAP</td>
+                                <td class="px-4 py-3">Internet Message Access Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Cleartext authentication, brute force attacks, outdated mail servers</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">161/162</td>
+                                <td class="px-4 py-3">SNMP</td>
+                                <td class="px-4 py-3">Simple Network Management Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Default community strings, information disclosure, SNMPv1/v2 no encryption</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">389</td>
+                                <td class="px-4 py-3">LDAP</td>
+                                <td class="px-4 py-3">Lightweight Directory Access Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Cleartext authentication, information disclosure, injection attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">443</td>
+                                <td class="px-4 py-3">HTTPS</td>
+                                <td class="px-4 py-3">HTTP Secure</td>
+                                <td class="px-4 py-3 text-red-600">SSL/TLS vulnerabilities (Heartbleed, POODLE), weak ciphers, certificate issues</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">445</td>
+                                <td class="px-4 py-3">SMB</td>
+                                <td class="px-4 py-3">Server Message Block</td>
+                                <td class="px-4 py-3 text-red-600">EternalBlue, SMBGhost, null sessions, relay attacks, outdated Samba</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">464</td>
+                                <td class="px-4 py-3">Kerberos</td>
+                                <td class="px-4 py-3">Kerberos password change</td>
+                                <td class="px-4 py-3 text-red-600">Password policy bypass, brute force attacks, AS-REP roasting</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">500</td>
+                                <td class="px-4 py-3">IKE</td>
+                                <td class="px-4 py-3">Internet Key Exchange (VPN)</td>
+                                <td class="px-4 py-3 text-red-600">Aggressive mode weaknesses, pre-shared key disclosure, crypto flaws</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">514</td>
+                                <td class="px-4 py-3">RSH</td>
+                                <td class="px-4 py-3">Remote Shell</td>
+                                <td class="px-4 py-3 text-red-600">Host authentication bypass, no encryption, command injection</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">515</td>
+                                <td class="px-4 py-3">LPD</td>
+                                <td class="px-4 py-3">Line Printer Daemon</td>
+                                <td class="px-4 py-3 text-red-600">Buffer overflows, unauthorized access, DoS attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">520</td>
+                                <td class="px-4 py-3">RIP</td>
+                                <td class="px-4 py-3">Routing Information Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Route poisoning, rogue routing updates, traffic hijacking</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">587</td>
+                                <td class="px-4 py-3">SMTP (Submission)</td>
+                                <td class="px-4 py-3">Mail Submission</td>
+                                <td class="px-4 py-3 text-red-600">Similar to port 25 - authentication bypass, mail spoofing</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">636</td>
+                                <td class="px-4 py-3">LDAPS</td>
+                                <td class="px-4 py-3">LDAP over SSL</td>
+                                <td class="px-4 py-3 text-red-600">Certificate validation issues, weak ciphers, LDAP injection</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">873</td>
+                                <td class="px-4 py-3">Rsync</td>
+                                <td class="px-4 py-3">Remote Sync</td>
+                                <td class="px-4 py-3 text-red-600">Anonymous access, insecure permissions, data exfiltration</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">995</td>
+                                <td class="px-4 py-3">POP3S</td>
+                                <td class="px-4 py-3">POP3 over SSL</td>
+                                <td class="px-4 py-3 text-red-600">SSL/TLS vulnerabilities, weak authentication, outdated mail servers</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">993</td>
+                                <td class="px-4 py-3">IMAPS</td>
+                                <td class="px-4 py-3">IMAP over SSL</td>
+                                <td class="px-4 py-3 text-red-600">SSL/TLS vulnerabilities, weak authentication, outdated mail servers</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">1080</td>
+                                <td class="px-4 py-3">SOCKS Proxy</td>
+                                <td class="px-4 py-3">SOCKS Proxy</td>
+                                <td class="px-4 py-3 text-red-600">Open proxy, anonymous traffic routing, authentication bypass</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">1433</td>
+                                <td class="px-4 py-3">MSSQL</td>
+                                <td class="px-4 py-3">Microsoft SQL Server</td>
+                                <td class="px-4 py-3 text-red-600">Weak SA password, SQL injection, stored procedures abuse</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">1434</td>
+                                <td class="px-4 py-3">MSSQL Browser</td>
+                                <td class="px-4 py-3">SQL Server Browser</td>
+                                <td class="px-4 py-3 text-red-600">SQL instance enumeration, information disclosure, DoS attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">1521</td>
+                                <td class="px-4 py-3">Oracle DB</td>
+                                <td class="px-4 py-3">Oracle Database</td>
+                                <td class="px-4 py-3 text-red-600">Default credentials, TNS poisoning, PL/SQL injection</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">1723</td>
+                                <td class="px-4 py-3">PPTP</td>
+                                <td class="px-4 py-3">Point-to-Point Tunneling Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Weak encryption (MS-CHAPv2), authentication bypass</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">1883</td>
+                                <td class="px-4 py-3">MQTT</td>
+                                <td class="px-4 py-3">Message Queuing Telemetry Transport</td>
+                                <td class="px-4 py-3 text-red-600">No encryption by default, weak authentication, IoT device takeover</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">2049</td>
+                                <td class="px-4 py-3">NFS</td>
+                                <td class="px-4 py-3">Network File System</td>
+                                <td class="px-4 py-3 text-red-600">Insecure exports, no authentication, sensitive file access</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">2375/2376</td>
+                                <td class="px-4 py-3">Docker</td>
+                                <td class="px-4 py-3">Docker API</td>
+                                <td class="px-4 py-3 text-red-600">Unauthorized container access, host system compromise (2375 is unencrypted)</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">3128</td>
+                                <td class="px-4 py-3">Squid Proxy</td>
+                                <td class="px-4 py-3">Web Proxy</td>
+                                <td class="px-4 py-3 text-red-600">Misconfigured proxy, unauthorized access, information disclosure</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">3306</td>
+                                <td class="px-4 py-3">MySQL</td>
+                                <td class="px-4 py-3">MySQL Database</td>
+                                <td class="px-4 py-3 text-red-600">Default credentials, SQL injection, outdated versions</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">3389</td>
+                                <td class="px-4 py-3">RDP</td>
+                                <td class="px-4 py-3">Remote Desktop Protocol</td>
+                                <td class="px-4 py-3 text-red-600">BlueKeep (CVE-2019-0708), brute force attacks, MitM attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">3690</td>
+                                <td class="px-4 py-3">SVN</td>
+                                <td class="px-4 py-3">Subversion</td>
+                                <td class="px-4 py-3 text-red-600">Repository access, source code disclosure, weak authentication</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">4333</td>
+                                <td class="px-4 py-3">mSQL</td>
+                                <td class="px-4 py-3">Mini SQL</td>
+                                <td class="px-4 py-3 text-red-600">Default credentials, SQL injection, outdated versions</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5000</td>
+                                <td class="px-4 py-3">Flask/Synology</td>
+                                <td class="px-4 py-3">Web Framework/NAS</td>
+                                <td class="px-4 py-3 text-red-600">Debug mode enabled, information disclosure, authentication bypass</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5040</td>
+                                <td class="px-4 py-3">DCE/RPC</td>
+                                <td class="px-4 py-3">DCE/RPC Endpoint Mapper</td>
+                                <td class="px-4 py-3 text-red-600">Service enumeration, remote code execution</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5060/5061</td>
+                                <td class="px-4 py-3">SIP</td>
+                                <td class="px-4 py-3">Session Initiation Protocol</td>
+                                <td class="px-4 py-3 text-red-600">VoIP eavesdropping, call hijacking, toll fraud (5060 unencrypted, 5061 TLS)</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5432</td>
+                                <td class="px-4 py-3">PostgreSQL</td>
+                                <td class="px-4 py-3">PostgreSQL Database</td>
+                                <td class="px-4 py-3 text-red-600">Default credentials, SQL injection, outdated versions</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5632</td>
+                                <td class="px-4 py-3">PCAnywhere</td>
+                                <td class="px-4 py-3">Remote Administration</td>
+                                <td class="px-4 py-3 text-red-600">Authentication bypass, outdated versions, weak encryption</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5666</td>
+                                <td class="px-4 py-3">Nagios NRPE</td>
+                                <td class="px-4 py-3">Monitoring Agent</td>
+                                <td class="px-4 py-3 text-red-600">Command injection, remote code execution, weak configuration</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5672</td>
+                                <td class="px-4 py-3">AMQP</td>
+                                <td class="px-4 py-3">Advanced Message Queuing Protocol</td>
+                                <td class="px-4 py-3 text-red-600">Default credentials, message interception, DoS attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5900</td>
+                                <td class="px-4 py-3">VNC</td>
+                                <td class="px-4 py-3">Virtual Network Computing</td>
+                                <td class="px-4 py-3 text-red-600">Weak passwords, no encryption by default, brute force attacks</td>
+                            </tr>
+                            <tr>
+                                <td class="px-4 py-3 font-medium">5984</td>
+                                <td class="px-4 py-3">CouchDB</td>
+                                <td class="px-4 py-3">Document Database</td>
+                                <td class="px-4 py-3 text-red-600
+
+        <!-- Footer -->
+        <footer class="mt-8 text-center text-sm text-gray-500">
+            <p>This tool is for educational purposes only. Always scan networks with proper authorization.</p>
+        </footer>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+        // Tab functionality
+        const basicInfoTab = document.getElementById('basicInfoTab');
+        const commonPortsTab = document.getElementById('commonPortsTab');
+        const basicInfoContent = document.getElementById('basicInfoContent');
+        const commonPortsContent = document.getElementById('commonPortsContent');
+
+        // Basic Info Tab click handler
+        basicInfoTab.addEventListener('click', () => {
+            basicInfoContent.classList.remove('hidden');
+            commonPortsContent.classList.add('hidden');
+            basicInfoTab.classList.add('bg-blue-100', 'text-blue-800');
+            commonPortsTab.classList.remove('bg-blue-100', 'text-blue-800');
+        });
+
+        // Common Ports Tab click handler
+        commonPortsTab.addEventListener('click', () => {
+            commonPortsContent.classList.remove('hidden');
+            basicInfoContent.classList.add('hidden');
+            commonPortsTab.classList.add('bg-blue-100', 'text-blue-800');
+            basicInfoTab.classList.remove('bg-blue-100', 'text-blue-800');
+        });
+
+        // DOM Elements
+        const scanForm = document.getElementById('scanForm');
+        const scanButton = document.getElementById('scanButton');
+        const scanStatus = document.getElementById('scanStatus');
+        const loader = document.getElementById('loader');
+        const noResults = document.getElementById('noResults');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultsAccordion = document.getElementById('resultsAccordion');
+        const scannedCount = document.getElementById('scannedCount');
+        const openPortsCount = document.getElementById('openPortsCount');
+        const vulnCount = document.getElementById('vulnCount');
+        const clearResults = document.getElementById('clearResults');
+
+        // Event Listeners
+        scanForm.addEventListener('submit', performScan);
+        clearResults.addEventListener('click', clearScanResults);
+
+        // Show initial state
+        noResults.classList.remove('hidden');
+
+        // Scan function
+        function performScan(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const formData = new FormData(scanForm);
+            const ipRange = formData.get('ip_range').trim();
+            
+            // Validate input
+            if (!ipRange) {
+                showAlert('Please enter an IP range');
+                return;
+            }
+            
+            // Update UI for scanning state
+            scanButton.disabled = true;
+            scanButton.classList.add('bg-gray-400');
+            scanButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            scanStatus.textContent = 'Scanning...';
+            loader.classList.remove('hidden');
+            noResults.classList.add('hidden');
+            resultsContainer.classList.add('hidden');
+            
+            // Send request to server
+            fetch('/scan', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reset scan button
+                scanButton.disabled = false;
+                scanButton.classList.remove('bg-gray-400');
+                scanButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                
+                // Hide loader
+                loader.classList.add('hidden');
+                
+                // Handle error
+                if (data.error) {
+                    scanStatus.textContent = 'Error: ' + data.error;
+                    noResults.classList.remove('hidden');
+                    return;
+                }
+                
+                // Process and display results
+                displayResults(data.results);
+            })
+            .catch(error => {
+                // Handle network errors
+                scanButton.disabled = false;
+                scanButton.classList.remove('bg-gray-400');
+                scanButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                loader.classList.add('hidden');
+                scanStatus.textContent = 'Error: Network issue';
+                noResults.classList.remove('hidden');
+                console.error('Error:', error);
+            });
+        }
+
+        // Display scan results
+        function displayResults(results) {
+            // Clear previous results
+            resultsAccordion.innerHTML = '';
+            
+            if (!results || results.length === 0) {
+                scanStatus.textContent = 'No results found';
+                noResults.classList.remove('hidden');
+                return;
+            }
+            
+            scanStatus.textContent = `Scan completed: ${results.length} hosts`;
+            resultsContainer.classList.remove('hidden');
+            
+            // Count totals
+            let totalOpenPorts = 0;
+            let totalVulns = 0;
+            
+            // Process each host
+            results.forEach((host, index) => {
+                const hostCard = document.createElement('div');
+                hostCard.className = 'border border-gray-200 rounded-lg overflow-hidden';
+                
+                // Count ports and vulnerabilities
+                const openPorts = host.ports ? host.ports.length : 0;
+                const vulns = host.vulnerabilities ? host.vulnerabilities.length : 0;
+                totalOpenPorts += openPorts;
+                totalVulns += vulns;
+                
+                // Create header (always visible)
+                const header = document.createElement('div');
+                header.className = 'flex items-center justify-between bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition';
+                header.onclick = () => toggleAccordion(host.ip);
+                
+                // Left side of header with IP and source
+                const headerLeft = document.createElement('div');
+                headerLeft.className = 'flex items-center space-x-3';
+                
+                // Icon based on findings
+                let iconName = 'server';
+                let iconColor = 'text-gray-500';
+                
+                if (vulns > 0) {
+                    iconName = 'alert-triangle';
+                    iconColor = 'text-red-500';
+                } else if (openPorts > 0) {
+                    iconName = 'alert-circle';
+                    iconColor = 'text-orange-500';
+                }
+                
+                headerLeft.innerHTML = `
+                    <i data-lucide="${iconName}" class="w-5 h-5 ${iconColor}"></i>
+                    <div>
+                        <h3 class="font-medium text-gray-800">${host.ip}</h3>
+                        <div class="flex items-center space-x-1 text-xs text-gray-500">
+                            <i data-lucide="database" class="w-3 h-3"></i>
+                            <span>Source: ${host.source}</span>
+                        </div>
+                    </div>
+                `;
+                
+                // Right side with port and vulnerability count
+                const headerRight = document.createElement('div');
+                headerRight.className = 'flex items-center space-x-4';
+                
+                headerRight.innerHTML = `
+                    <div class="flex items-center space-x-1 text-sm">
+                        <i data-lucide="plug" class="w-4 h-4 ${openPorts > 0 ? 'text-orange-500' : 'text-gray-400'}"></i>
+                        <span>${openPorts} ports</span>
+                    </div>
+                    <div class="flex items-center space-x-1 text-sm">
+                        <i data-lucide="shield-alert" class="w-4 h-4 ${vulns > 0 ? 'text-red-500' : 'text-gray-400'}"></i>
+                        <span>${vulns} vulns</span>
+                    </div>
+                    <i data-lucide="chevron-down" id="chevron-${host.ip}" class="w-5 h-5 text-gray-400 transition-transform"></i>
+                `;
+                
+                header.appendChild(headerLeft);
+                header.appendChild(headerRight);
+                hostCard.appendChild(header);
+                
+                // Create content (initially hidden)
+                const content = document.createElement('div');
+                content.id = `content-${host.ip}`;
+                content.className = 'hidden border-t border-gray-200';
+                
+                // Ports section
+                if (host.ports && host.ports.length > 0) {
+                    const portsSection = document.createElement('div');
+                    portsSection.className = 'p-4';
+                    
+                    const portsHeader = document.createElement('div');
+                    portsHeader.className = 'flex items-center space-x-2 mb-3';
+                    portsHeader.innerHTML = `
+                        <i data-lucide="plug" class="w-4 h-4 text-orange-500"></i>
+                        <h4 class="font-medium text-gray-700">Open Ports</h4>
+                    `;
+                    
+                    const portsList = document.createElement('div');
+                    portsList.className = 'space-y-2';
+                    
+                    host.ports.forEach(port => {
+                        const portItem = document.createElement('div');
+                        portItem.className = 'port-open p-3 rounded-md text-sm';
+                        portItem.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="font-medium">Port ${port.port} (${port.service || 'Unknown'})</div>
+                                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Open</span>
+                            </div>
+                            <p class="mt-1 text-gray-600 text-xs">Service: ${port.service || 'Unknown'}</p>
+                        `;
+                        portsList.appendChild(portItem);
+                    });
+                    
+                    portsSection.appendChild(portsHeader);
+                    portsSection.appendChild(portsList);
+                    content.appendChild(portsSection);
+                } else {
+                    const noPortsSection = document.createElement('div');
+                    noPortsSection.className = 'p-4 text-gray-500 text-sm flex items-center space-x-2';
+                    noPortsSection.innerHTML = `
+                        <i data-lucide="shield-check" class="w-4 h-4 text-green-500"></i>
+                        <span>No open ports detected</span>
+                    `;
+                    content.appendChild(noPortsSection);
+                }
+                
+                // Vulnerabilities section
+                if (host.vulnerabilities && host.vulnerabilities.length > 0) {
+                    const vulnsSection = document.createElement('div');
+                    vulnsSection.className = 'p-4 border-t border-gray-200';
+                    
+                    const vulnsHeader = document.createElement('div');
+                    vulnsHeader.className = 'flex items-center space-x-2 mb-3';
+                    vulnsHeader.innerHTML = `
+                        <i data-lucide="shield-alert" class="w-4 h-4 text-red-500"></i>
+                        <h4 class="font-medium text-gray-700">Vulnerabilities</h4>
+                    `;
+                    
+                    const vulnsList = document.createElement('div');
+                    vulnsList.className = 'space-y-2';
+                    
+                    host.vulnerabilities.forEach(vuln => {
+                        // Determine severity (mock data - you might get this from the API)
+                        let severityClass = 'vuln-medium';
+                        let severityText = 'Medium';
+                        
+                        if (vuln.includes('2023') || vuln.includes('2024')) {
+                            severityClass = 'vuln-high';
+                            severityText = 'High';
+                        } else if (vuln.includes('2015') || vuln.includes('2016')) {
+                            severityClass = 'vuln-low';
+                            severityText = 'Low';
+                        }
+                        
+                        const vulnItem = document.createElement('div');
+                        vulnItem.className = `${severityClass} p-3 rounded-md text-sm`;
+                        vulnItem.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="font-medium">${vuln}</div>
+                                <span class="px-2 py-1 ${severityText === 'High' ? 'bg-red-100 text-red-800' : severityText === 'Medium' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'} text-xs rounded-full">${severityText}</span>
+                            </div>
+                            <a href="https://nvd.nist.gov/vuln/detail/${vuln}" target="_blank" class="mt-1 text-blue-600 hover:underline flex items-center space-x-1 text-xs">
+                                <i data-lucide="external-link" class="w-3 h-3"></i>
+                                <span>View details</span>
+                            </a>
+                        `;
+                        vulnsList.appendChild(vulnItem);
+                    });
+                    
+                    vulnsSection.appendChild(vulnsHeader);
+                    vulnsSection.appendChild(vulnsList);
+                    content.appendChild(vulnsSection);
+                }
+                
+                hostCard.appendChild(content);
+                resultsAccordion.appendChild(hostCard);
+            });
+            
+            // Update counts
+            scannedCount.textContent = results.length;
+            openPortsCount.textContent = totalOpenPorts;
+            vulnCount.textContent = totalVulns;
+            
+            // Initialize Lucide icons for the new content
+            document.addEventListener('DOMContentLoaded', () => {
+                lucide.createIcons();
+            });
+        }
+
+        // Toggle accordion sections
+        function toggleAccordion(hostIp) {
+            const content = document.getElementById(`content-${hostIp}`);
+            const chevron = document.getElementById(`chevron-${hostIp}`);
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                chevron.style.transform = 'rotate(180deg)';
+            } else {
+                content.classList.add('hidden');
+                chevron.style.transform = 'rotate(0)';
+            }
+        }
+
+        // Clear scan results
+        function clearScanResults() {
+            resultsContainer.classList.add('hidden');
+            noResults.classList.remove('hidden');
+            scanStatus.textContent = 'Ready to scan';
+            resultsAccordion.innerHTML = '';
+        }
+
+        // Show alert message
+        function showAlert(message) {
+            alert(message);
+        }
+    </script>
+</body>
+</html>
