@@ -1,59 +1,79 @@
 from flask import Flask, render_template, request, jsonify
 import ipaddress
 import shodan
-import socket
 from concurrent.futures import ThreadPoolExecutor
 import os
+import logging
 
 app = Flask(__name__)
+app.logger.setLevel(logging.DEBUG)
 
 # Safety configuration
-MAX_SCAN_IPS = 256  # Maximum number of IPs allowed per scan
-COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 3389]
+MAX_SCAN_IPS = 256
 
-# Initialize Shodan (use environment variable for API key)
-SHODAN_API_KEY = os.getenv('Sw6nsq5lw00tEfuUk2XGSteUPoTbhJCl', '')
+# Shodan configuration
+SHODAN_API_KEY = os.getenv('SHODAN_API_KEY', '')
 shodan_api = shodan.Shodan(SHODAN_API_KEY) if SHODAN_API_KEY else None
 
-def parse_ip_range(ip_range):
+def parse_target(target):
+    """Improved target parsing with better error handling"""
+    target = target.strip()
+    
     try:
-        if '/' in ip_range:
-            network = ipaddress.IPv4Network(ip_range, strict=False)
+        # Try single IP first
+        ip = ipaddress.ip_address(target)
+        return [ip]
+    except ValueError:
+        pass
+
+    try:
+        # Try CIDR
+        if '/' in target:
+            network = ipaddress.ip_network(target, strict=False)
             return list(network.hosts())
-        if '-' in ip_range:
-            start_ip, end_ip = ip_range.split('-', 1)
-            start = ipaddress.IPv4Address(start_ip.strip())
-            end = ipaddress.IPv4Address(end_ip.strip())
+    except ValueError:
+        pass
+
+    try:
+        # Try IP range
+        if '-' in target:
+            start_str, end_str = target.split('-', 1)
+            start = ipaddress.ip_address(start_str.strip())
+            end = ipaddress.ip_address(end_str.strip())
             if start > end:
                 start, end = end, start
-            return [ipaddress.IPv4Address(ip) for ip in range(int(start), int(end)+1)]
-        return [ipaddress.IPv4Address(ip_range)]
-    except (ipaddress.AddressValueError, ValueError):
-        return None
+            return [ipaddress.ip_address(ip) for ip in range(int(start), int(end)+1)]
+    except ValueError:
+        pass
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+    return None
 
 @app.route('/scan', methods=['POST'])
 def scan():
-    ip_range = request.form.get('ip_range', '').strip()
-    if not ip_range:
-        return jsonify({"error": "Please enter an IP range to scan"})
-    
-    ips = parse_ip_range(ip_range)
-    if not ips:
-        return jsonify({"error": "Invalid IP range format. Use CIDR or IP range"})
-    
-    if len(ips) > MAX_SCAN_IPS:
-        return jsonify({"error": f"Maximum scan range exceeded ({MAX_SCAN_IPS} IPs allowed)"})
+    if not request.is_json:
+        return jsonify({"error": "Invalid content type, requires JSON"}), 400
 
-    results = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        futures = [executor.submit(scan_ip, ip) for ip in ips]
-        results = [future.result() for future in futures]
-    
-    return jsonify({"results": results})
+    data = request.get_json()
+    target = data.get('target', '').strip()
+    app.logger.debug(f"Scan request received for target: '{target}'")
+
+    if not target:
+        return jsonify({"error": "Please enter an IP address or range"}), 400
+
+    ips = parse_target(target)
+    if not ips:
+        return jsonify({"error": "Invalid target format. Use: 192.168.1.1, 10.0.0.0/24, or 192.168.1.1-192.168.1.5"}), 400
+
+    if len(ips) > MAX_SCAN_IPS:
+        return jsonify({"error": f"Maximum scan range exceeded ({MAX_SCAN_IPS} IPs allowed)"}), 400
+
+    try:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(scan_ip, ips))
+        return jsonify({"results": results})
+    except Exception as e:
+        app.logger.error(f"Scan error: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 def scan_ip(ip):
     result = {"ip": str(ip), "ports": [], "vulnerabilities": [], "source": "shodan"}
@@ -67,21 +87,24 @@ def scan_ip(ip):
             "port": item['port'],
             "status": "open",
             "service": item.get('product', 'unknown')
-        } for item in host['data']]
+        } for item in host.get('data', [])]
         result["vulnerabilities"] = host.get('vulns', [])
         return result
     except shodan.APIError as e:
-        print(f"Shodan API error: {e}")
+        app.logger.warning(f"Shodan API error for {ip}: {str(e)}")
         return result
     except Exception as e:
-        print(f"General error: {e}")
+        app.logger.error(f"Error scanning {ip}: {str(e)}")
         return result
 
 @app.route('/get_my_ip', methods=['GET'])
 def get_my_ip():
-    # X-Forwarded-For header for proxy compatibility
-    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-    return jsonify({"ip": client_ip.split(',')[0].strip()})
+    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr).split(',')[0].strip()
+    return jsonify({"ip": client_ip})
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 if __name__ == '__main__':
     app.run(debug=True)
