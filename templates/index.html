@@ -109,10 +109,6 @@
                             <i data-lucide="lock" class="w-4 h-4 text-green-500 mt-0.5"></i>
                             <p>Always protect network services with strong authentication and encryption</p>
                         </div>
-                        <div class="flex items-start space-x-2">
-                            <i data-lucide="alert-circle" class="w-4 h-4 text-red-500 mt-0.5"></i>
-                            <p> Scan scans show Shodan data for public IPs when used remotely. Run locally to scan your private network.</p>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -558,178 +554,330 @@
             <p>This tool is for educational purposes only. Always scan networks with proper authorization.</p>
         </footer>
     </div>
+
     <script>
-    // Initialize Lucide icons
-    lucide.createIcons();
+        // Initialize Lucide icons
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+        });
+        // Tab functionality
+        const basicInfoTab = document.getElementById('basicInfoTab');
+        const commonPortsTab = document.getElementById('commonPortsTab');
+        const basicInfoContent = document.getElementById('basicInfoContent');
+        const commonPortsContent = document.getElementById('commonPortsContent');
 
-    // DOM Elements
-    const scanForm = document.getElementById('scanForm');
-    const ipInput = document.getElementById('ip_range');
-    const scanStatus = document.getElementById('scanStatus');
-    const loader = document.getElementById('loader');
-    const resultsContainer = document.getElementById('resultsContainer');
-
-    // Event Listeners
-    scanForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const target = ipInput.value.trim();
-        
-        if (!target) {
-            showAlert('Please enter an IP address or range');
-            return;
-        }
-
-        // Clear previous results
-        resultsContainer.innerHTML = '';
-        loader.classList.remove('hidden');
-        scanStatus.textContent = 'Scanning...';
-
-        try {
-            let scanTarget = target;
-            
-            // Handle 'myip' shortcut
-            if (target.toLowerCase() === 'myip') {
-                const ipResponse = await fetch('/get_my_ip');
-                const { ip } = await ipResponse.json();
-                scanTarget = ip;
-                ipInput.value = ip;
-            }
-
-            const response = await fetch('/scan', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ target: scanTarget })
-            });
-
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Scan failed');
-            }
-
-            const { results } = await response.json();
-            displayResults(results);
-            scanStatus.textContent = `Scan complete: ${results.length} hosts found`;
-        } catch (error) {
-            scanStatus.textContent = `Error: ${error.message}`;
-            console.error('Scan error:', error);
-        } finally {
-            loader.classList.add('hidden');
-        }
-    });
-
-    function displayResults(results) {
-        resultsContainer.innerHTML = '';
-        
-        if (!results || !results.length) {
-            resultsContainer.innerHTML = `
-                <div class="p-4 text-center text-gray-500">
-                    <i data-lucide="search-x" class="w-12 h-12 mx-auto"></i>
-                    <p class="mt-2">No scan results found</p>
-                </div>
-            `;
-            return;
-        }
-
-        results.forEach(host => {
-            const hostCard = document.createElement('div');
-            hostCard.className = 'mb-4 border rounded-lg bg-white';
-            
-            // Host header
-            const header = document.createElement('div');
-            header.className = 'p-4 flex justify-between items-center cursor-pointer border-b';
-            header.innerHTML = `
-                <div class="flex items-center gap-3">
-                    <i data-lucide="${host.vulnerabilities.length ? 'alert-triangle' : 'server'}" 
-                       class="w-5 h-5 ${host.vulnerabilities.length ? 'text-red-500' : 'text-gray-500'}"></i>
-                    <div>
-                        <h3 class="font-medium">${host.ip}</h3>
-                        <p class="text-sm text-gray-500">${host.source.toUpperCase()} scan</p>
-                    </div>
-                </div>
-                <div class="flex items-center gap-4">
-                    <div class="badge ${host.ports.length ? 'badge-warning' : 'badge-success'}">
-                        ${host.ports.length} ports
-                    </div>
-                    <div class="badge ${host.vulnerabilities.length ? 'badge-error' : 'badge-success'}">
-                        ${host.vulnerabilities.length} vulns
-                    </div>
-                </div>
-            `;
-
-            // Host details
-            const details = document.createElement('div');
-            details.className = 'hidden p-4 space-y-4';
-            
-            if (host.ports.length) {
-                details.innerHTML += `
-                    <div class="space-y-2">
-                        <h4 class="font-medium flex items-center gap-2">
-                            <i data-lucide="plug" class="w-4 h-4"></i>
-                            Open Ports
-                        </h4>
-                        ${host.ports.map(port => `
-                            <div class="p-3 bg-blue-50 rounded-md">
-                                <div class="flex justify-between items-center">
-                                    <span>Port ${port.port}</span>
-                                    <span class="badge badge-success">${port.service}</span>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
-
-            if (host.vulnerabilities.length) {
-                details.innerHTML += `
-                    <div class="space-y-2">
-                        <h4 class="font-medium flex items-center gap-2">
-                            <i data-lucide="shield-alert" class="w-4 h-4"></i>
-                            Vulnerabilities
-                        </h4>
-                        ${host.vulnerabilities.map(vuln => `
-                            <div class="p-3 bg-red-50 rounded-md">
-                                <div class="flex justify-between items-center">
-                                    <span>${vuln}</span>
-                                    <a href="https://nvd.nist.gov/vuln/detail/${vuln}" 
-                                       target="_blank"
-                                       class="badge badge-error hover:underline">
-                                        Details
-                                    </a>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-            }
-
-            header.addEventListener('click', () => {
-                details.classList.toggle('hidden');
-                lucide.createIcons();
-            });
-
-            hostCard.append(header, details);
-            resultsContainer.append(hostCard);
+        // Basic Info Tab click handler
+        basicInfoTab.addEventListener('click', () => {
+            basicInfoContent.classList.remove('hidden');
+            commonPortsContent.classList.add('hidden');
+            basicInfoTab.classList.add('bg-blue-100', 'text-blue-800');
+            commonPortsTab.classList.remove('bg-blue-100', 'text-blue-800');
         });
 
-        lucide.createIcons();
-    }
+        // Common Ports Tab click handler
+        commonPortsTab.addEventListener('click', () => {
+            commonPortsContent.classList.remove('hidden');
+            basicInfoContent.classList.add('hidden');
+            commonPortsTab.classList.add('bg-blue-100', 'text-blue-800');
+            basicInfoTab.classList.remove('bg-blue-100', 'text-blue-800');
+        });
 
-    function showAlert(message, type = 'error') {
-        const alert = document.createElement('div');
-        alert.className = `fixed top-4 right-4 p-4 rounded-lg ${
-            type === 'error' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'
-        }`;
-        alert.innerHTML = `
-            <div class="flex items-center gap-2">
-                <i data-lucide="${type === 'error' ? 'alert-circle' : 'info'}"></i>
-                <span>${message}</span>
-            </div>
-        `;
-        
-        document.body.append(alert);
-        setTimeout(() => alert.remove(), 3000);
-        lucide.createIcons();
-    }
-</script>
+        // DOM Elements
+        const scanForm = document.getElementById('scanForm');
+        const scanButton = document.getElementById('scanButton');
+        const scanStatus = document.getElementById('scanStatus');
+        const loader = document.getElementById('loader');
+        const noResults = document.getElementById('noResults');
+        const resultsContainer = document.getElementById('resultsContainer');
+        const resultsAccordion = document.getElementById('resultsAccordion');
+        const scannedCount = document.getElementById('scannedCount');
+        const openPortsCount = document.getElementById('openPortsCount');
+        const vulnCount = document.getElementById('vulnCount');
+        const clearResults = document.getElementById('clearResults');
+
+        // Event Listeners
+        scanForm.addEventListener('submit', performScan);
+        clearResults.addEventListener('click', clearScanResults);
+
+        // Show initial state
+        noResults.classList.remove('hidden');
+
+        // Scan function
+        function performScan(e) {
+            e.preventDefault();
+            
+            // Get form data
+            const formData = new FormData(scanForm);
+            const ipRange = formData.get('ip_range').trim();
+            
+            // Validate input
+            if (!ipRange) {
+                showAlert('Please enter an IP range');
+                return;
+            }
+            
+            // Update UI for scanning state
+            scanButton.disabled = true;
+            scanButton.classList.add('bg-gray-400');
+            scanButton.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            scanStatus.textContent = 'Scanning...';
+            loader.classList.remove('hidden');
+            noResults.classList.add('hidden');
+            resultsContainer.classList.add('hidden');
+            
+            // Send request to server
+            fetch('/scan', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                // Reset scan button
+                scanButton.disabled = false;
+                scanButton.classList.remove('bg-gray-400');
+                scanButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                
+                // Hide loader
+                loader.classList.add('hidden');
+                
+                // Handle error
+                if (data.error) {
+                    scanStatus.textContent = 'Error: ' + data.error;
+                    noResults.classList.remove('hidden');
+                    return;
+                }
+                
+                // Process and display results
+                displayResults(data.results);
+            })
+            .catch(error => {
+                // Handle network errors
+                scanButton.disabled = false;
+                scanButton.classList.remove('bg-gray-400');
+                scanButton.classList.add('bg-blue-600', 'hover:bg-blue-700');
+                loader.classList.add('hidden');
+                scanStatus.textContent = 'Error: Network issue';
+                noResults.classList.remove('hidden');
+                console.error('Error:', error);
+            });
+        }
+
+        // Display scan results
+        function displayResults(results) {
+            // Clear previous results
+            resultsAccordion.innerHTML = '';
+            
+            if (!results || results.length === 0) {
+                scanStatus.textContent = 'No results found';
+                noResults.classList.remove('hidden');
+                return;
+            }
+            
+            scanStatus.textContent = `Scan completed: ${results.length} hosts`;
+            resultsContainer.classList.remove('hidden');
+            
+            // Count totals
+            let totalOpenPorts = 0;
+            let totalVulns = 0;
+            
+            // Process each host
+            results.forEach((host, index) => {
+                const hostCard = document.createElement('div');
+                hostCard.className = 'border border-gray-200 rounded-lg overflow-hidden';
+                
+                // Count ports and vulnerabilities
+                const openPorts = host.ports ? host.ports.length : 0;
+                const vulns = host.vulnerabilities ? host.vulnerabilities.length : 0;
+                totalOpenPorts += openPorts;
+                totalVulns += vulns;
+                
+                // Create header (always visible)
+                const header = document.createElement('div');
+                header.className = 'flex items-center justify-between bg-gray-50 p-4 cursor-pointer hover:bg-gray-100 transition';
+                header.onclick = () => toggleAccordion(host.ip);
+                
+                // Left side of header with IP and source
+                const headerLeft = document.createElement('div');
+                headerLeft.className = 'flex items-center space-x-3';
+                
+                // Icon based on findings
+                let iconName = 'server';
+                let iconColor = 'text-gray-500';
+                
+                if (vulns > 0) {
+                    iconName = 'alert-triangle';
+                    iconColor = 'text-red-500';
+                } else if (openPorts > 0) {
+                    iconName = 'alert-circle';
+                    iconColor = 'text-orange-500';
+                }
+                
+                headerLeft.innerHTML = `
+                    <i data-lucide="${iconName}" class="w-5 h-5 ${iconColor}"></i>
+                    <div>
+                        <h3 class="font-medium text-gray-800">${host.ip}</h3>
+                        <div class="flex items-center space-x-1 text-xs text-gray-500">
+                            <i data-lucide="database" class="w-3 h-3"></i>
+                            <span>Source: ${host.source}</span>
+                        </div>
+                    </div>
+                `;
+                
+                // Right side with port and vulnerability count
+                const headerRight = document.createElement('div');
+                headerRight.className = 'flex items-center space-x-4';
+                
+                headerRight.innerHTML = `
+                    <div class="flex items-center space-x-1 text-sm">
+                        <i data-lucide="plug" class="w-4 h-4 ${openPorts > 0 ? 'text-orange-500' : 'text-gray-400'}"></i>
+                        <span>${openPorts} ports</span>
+                    </div>
+                    <div class="flex items-center space-x-1 text-sm">
+                        <i data-lucide="shield-alert" class="w-4 h-4 ${vulns > 0 ? 'text-red-500' : 'text-gray-400'}"></i>
+                        <span>${vulns} vulns</span>
+                    </div>
+                    <i data-lucide="chevron-down" id="chevron-${host.ip}" class="w-5 h-5 text-gray-400 transition-transform"></i>
+                `;
+                
+                header.appendChild(headerLeft);
+                header.appendChild(headerRight);
+                hostCard.appendChild(header);
+                
+                // Create content (initially hidden)
+                const content = document.createElement('div');
+                content.id = `content-${host.ip}`;
+                content.className = 'hidden border-t border-gray-200';
+                
+                // Ports section
+                if (host.ports && host.ports.length > 0) {
+                    const portsSection = document.createElement('div');
+                    portsSection.className = 'p-4';
+                    
+                    const portsHeader = document.createElement('div');
+                    portsHeader.className = 'flex items-center space-x-2 mb-3';
+                    portsHeader.innerHTML = `
+                        <i data-lucide="plug" class="w-4 h-4 text-orange-500"></i>
+                        <h4 class="font-medium text-gray-700">Open Ports</h4>
+                    `;
+                    
+                    const portsList = document.createElement('div');
+                    portsList.className = 'space-y-2';
+                    
+                    host.ports.forEach(port => {
+                        const portItem = document.createElement('div');
+                        portItem.className = 'port-open p-3 rounded-md text-sm';
+                        portItem.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="font-medium">Port ${port.port} (${port.service || 'Unknown'})</div>
+                                <span class="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Open</span>
+                            </div>
+                            <p class="mt-1 text-gray-600 text-xs">Service: ${port.service || 'Unknown'}</p>
+                        `;
+                        portsList.appendChild(portItem);
+                    });
+                    
+                    portsSection.appendChild(portsHeader);
+                    portsSection.appendChild(portsList);
+                    content.appendChild(portsSection);
+                } else {
+                    const noPortsSection = document.createElement('div');
+                    noPortsSection.className = 'p-4 text-gray-500 text-sm flex items-center space-x-2';
+                    noPortsSection.innerHTML = `
+                        <i data-lucide="shield-check" class="w-4 h-4 text-green-500"></i>
+                        <span>No open ports detected</span>
+                    `;
+                    content.appendChild(noPortsSection);
+                }
+                
+                // Vulnerabilities section
+                if (host.vulnerabilities && host.vulnerabilities.length > 0) {
+                    const vulnsSection = document.createElement('div');
+                    vulnsSection.className = 'p-4 border-t border-gray-200';
+                    
+                    const vulnsHeader = document.createElement('div');
+                    vulnsHeader.className = 'flex items-center space-x-2 mb-3';
+                    vulnsHeader.innerHTML = `
+                        <i data-lucide="shield-alert" class="w-4 h-4 text-red-500"></i>
+                        <h4 class="font-medium text-gray-700">Vulnerabilities</h4>
+                    `;
+                    
+                    const vulnsList = document.createElement('div');
+                    vulnsList.className = 'space-y-2';
+                    
+                    host.vulnerabilities.forEach(vuln => {
+                        // Determine severity (mock data - you might get this from the API)
+                        let severityClass = 'vuln-medium';
+                        let severityText = 'Medium';
+                        
+                        if (vuln.includes('2023') || vuln.includes('2024')) {
+                            severityClass = 'vuln-high';
+                            severityText = 'High';
+                        } else if (vuln.includes('2015') || vuln.includes('2016')) {
+                            severityClass = 'vuln-low';
+                            severityText = 'Low';
+                        }
+                        
+                        const vulnItem = document.createElement('div');
+                        vulnItem.className = `${severityClass} p-3 rounded-md text-sm`;
+                        vulnItem.innerHTML = `
+                            <div class="flex items-center justify-between">
+                                <div class="font-medium">${vuln}</div>
+                                <span class="px-2 py-1 ${severityText === 'High' ? 'bg-red-100 text-red-800' : severityText === 'Medium' ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'} text-xs rounded-full">${severityText}</span>
+                            </div>
+                            <a href="https://nvd.nist.gov/vuln/detail/${vuln}" target="_blank" class="mt-1 text-blue-600 hover:underline flex items-center space-x-1 text-xs">
+                                <i data-lucide="external-link" class="w-3 h-3"></i>
+                                <span>View details</span>
+                            </a>
+                        `;
+                        vulnsList.appendChild(vulnItem);
+                    });
+                    
+                    vulnsSection.appendChild(vulnsHeader);
+                    vulnsSection.appendChild(vulnsList);
+                    content.appendChild(vulnsSection);
+                }
+                
+                hostCard.appendChild(content);
+                resultsAccordion.appendChild(hostCard);
+            });
+            
+            // Update counts
+            scannedCount.textContent = results.length;
+            openPortsCount.textContent = totalOpenPorts;
+            vulnCount.textContent = totalVulns;
+            
+            // Initialize Lucide icons for the new content
+            document.addEventListener('DOMContentLoaded', () => {
+                lucide.createIcons();
+            });
+        }
+
+        // Toggle accordion sections
+        function toggleAccordion(hostIp) {
+            const content = document.getElementById(`content-${hostIp}`);
+            const chevron = document.getElementById(`chevron-${hostIp}`);
+            
+            if (content.classList.contains('hidden')) {
+                content.classList.remove('hidden');
+                chevron.style.transform = 'rotate(180deg)';
+            } else {
+                content.classList.add('hidden');
+                chevron.style.transform = 'rotate(0)';
+            }
+        }
+
+        // Clear scan results
+        function clearScanResults() {
+            resultsContainer.classList.add('hidden');
+            noResults.classList.remove('hidden');
+            scanStatus.textContent = 'Ready to scan';
+            resultsAccordion.innerHTML = '';
+        }
+
+        // Show alert message
+        function showAlert(message) {
+            alert(message);
+        }
+    </script>
 </body>
 </html>
